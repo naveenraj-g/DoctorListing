@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Doctor Search</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: #111827;
+        background: #ffffff;
+      }
+      .card {
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      .title {
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .subtle {
+        color: #6b7280;
+        font-size: 12px;
+      }
+      .inputs {
+        display: grid;
+        gap: 8px;
+      }
+      .row {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      }
+      label {
+        font-size: 12px;
+        color: #374151;
+        display: grid;
+        gap: 4px;
+      }
+      input,
+      select {
+        padding: 8px 10px;
+        font-size: 13px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        background: #ffffff;
+        color: inherit;
+      }
+      input::placeholder {
+        color: #9ca3af;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .primary {
+        background: #111827;
+        color: #ffffff;
+      }
+      .ghost {
+        background: #f3f4f6;
+        color: #111827;
+      }
+      .status {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .results {
+        display: grid;
+        gap: 10px;
+      }
+      .result-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+      }
+      .result-title {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .result-meta {
+        font-size: 12px;
+        color: #4b5563;
+        display: grid;
+        gap: 4px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #f3f4f6;
+        color: #374151;
+        font-size: 11px;
+        font-weight: 600;
+        width: fit-content;
+      }
+      .empty {
+        border: 1px dashed #e5e7eb;
+        border-radius: 12px;
+        padding: 12px;
+        color: #6b7280;
+        font-size: 12px;
+        text-align: center;
+      }
+      .footer {
+        font-size: 11px;
+        color: #9ca3af;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div>
+        <div class="title">Doctor Search</div>
+        <div class="subtle">Search the NPI Registry by name, specialty, or location.</div>
+      </div>
+
+      <form class="inputs" id="search-form">
+        <div class="row">
+          <label>
+            First name
+            <input id="first_name" placeholder="Jane" />
+          </label>
+          <label>
+            Last name
+            <input id="last_name" placeholder="Doe" />
+          </label>
+          <label>
+            Organization
+            <input id="organization_name" placeholder="Clinic or hospital" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            Specialty
+            <input id="taxonomy_description" placeholder="Cardiology" />
+          </label>
+          <label>
+            City
+            <input id="city" placeholder="Seattle" />
+          </label>
+          <label>
+            State
+            <input id="state" placeholder="WA" maxlength="2" />
+          </label>
+          <label>
+            ZIP
+            <input id="postal_code" placeholder="98101" />
+          </label>
+        </div>
+        <div class="row">
+          <label>
+            NPI
+            <input id="npi" placeholder="10-digit NPI" />
+          </label>
+          <label>
+            Provider type
+            <select id="enumeration_type">
+              <option value="">Any</option>
+              <option value="NPI-1">Individual</option>
+              <option value="NPI-2">Organization</option>
+            </select>
+          </label>
+          <label>
+            Result limit
+            <select id="limit">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+          </label>
+        </div>
+        <div class="actions">
+          <button class="primary" type="submit">Search</button>
+          <button class="ghost" type="button" id="reset">Clear</button>
+          <span class="status" id="status"></span>
+        </div>
+      </form>
+
+      <div class="results" id="results"></div>
+      <div class="footer">Data source: NPPES NPI Registry (public API).</div>
+    </div>
+
+    <script>
+      const el = {
+        form: document.getElementById("search-form"),
+        status: document.getElementById("status"),
+        results: document.getElementById("results"),
+        reset: document.getElementById("reset"),
+        fields: {
+          npi: document.getElementById("npi"),
+          first_name: document.getElementById("first_name"),
+          last_name: document.getElementById("last_name"),
+          organization_name: document.getElementById("organization_name"),
+          taxonomy_description: document.getElementById("taxonomy_description"),
+          city: document.getElementById("city"),
+          state: document.getElementById("state"),
+          postal_code: document.getElementById("postal_code"),
+          enumeration_type: document.getElementById("enumeration_type"),
+          limit: document.getElementById("limit"),
+        },
+      };
+
+      function getQuery() {
+        return {
+          npi: el.fields.npi.value.trim() || undefined,
+          first_name: el.fields.first_name.value.trim() || undefined,
+          last_name: el.fields.last_name.value.trim() || undefined,
+          organization_name: el.fields.organization_name.value.trim() || undefined,
+          taxonomy_description: el.fields.taxonomy_description.value.trim() || undefined,
+          city: el.fields.city.value.trim() || undefined,
+          state: el.fields.state.value.trim().toUpperCase() || undefined,
+          postal_code: el.fields.postal_code.value.trim() || undefined,
+          enumeration_type: el.fields.enumeration_type.value || undefined,
+          limit: Number(el.fields.limit.value || 10),
+        };
+      }
+
+      function setQuery(query) {
+        Object.entries(el.fields).forEach(([key, input]) => {
+          if (query && Object.prototype.hasOwnProperty.call(query, key)) {
+            const value = query[key] ?? "";
+            input.value = String(value);
+          }
+        });
+      }
+
+      function renderResults(payload) {
+        const results = payload?.structuredContent?.results || [];
+        const resultCount = payload?.structuredContent?.result_count ?? results.length;
+        if (!results.length) {
+          el.results.innerHTML =
+            '<div class="empty">No matches yet. Try a different name, specialty, or location.</div>';
+          return;
+        }
+        el.results.innerHTML = results
+          .map((result) => {
+            const specialty = result.specialty || "";
+            const address = result.address || "";
+            const phone = result.phone || "";
+            return `
+              <div class="result-card">
+                <div class="result-title">${result.name || "Unnamed provider"}</div>
+                <div class="pill">${result.type || "NPI"} · ${result.npi || ""}</div>
+                <div class="result-meta">
+                  ${specialty ? `<div>${specialty}</div>` : ""}
+                  ${address ? `<div>${address}</div>` : ""}
+                  ${phone ? `<div>${phone}</div>` : ""}
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+        el.status.textContent = `Showing ${results.length} of ${resultCount} result(s)`;
+      }
+
+      function setStatus(text) {
+        el.status.textContent = text || "";
+      }
+
+      async function callTool(args) {
+        if (window.openai && typeof window.openai.callTool === "function") {
+          return window.openai.callTool({ name: "search_doctors", arguments: args });
+        }
+
+        if (window.parent && window.parent !== window) {
+          const rpcRequest = (method, params) =>
+            new Promise((resolve, reject) => {
+              const id = Math.random().toString(36).slice(2);
+              function handler(event) {
+                const message = event.data;
+                if (!message || message.id !== id) return;
+                window.removeEventListener("message", handler);
+                if (message.error) {
+                  reject(message.error);
+                } else {
+                  resolve(message.result);
+                }
+              }
+              window.addEventListener("message", handler);
+              window.parent.postMessage(
+                { jsonrpc: "2.0", id, method, params },
+                "*"
+              );
+            });
+
+          return rpcRequest("tools/call", { name: "search_doctors", arguments: args });
+        }
+
+        const response = await fetch("/mcp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "doctor-search-ui",
+            method: "tools/call",
+            params: { name: "search_doctors", arguments: args },
+          }),
+        });
+
+        const payload = await response.json();
+        if (payload.error) {
+          throw payload.error;
+        }
+        return payload.result;
+      }
+
+      el.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = getQuery();
+        const hasQuery = Object.values(query).some((value) => value);
+        if (!hasQuery) {
+          setStatus("Add at least one search field.");
+          return;
+        }
+        setStatus("Searching...");
+        el.results.innerHTML = "";
+        try {
+          const result = await callTool(query);
+          renderResults(result);
+          if (window.openai?.setWidgetState) {
+            window.openai.setWidgetState({ lastQuery: query, lastResults: result });
+          }
+        } catch (error) {
+          setStatus("Search failed. Please try again.");
+          el.results.innerHTML =
+            '<div class="empty">Unable to load results right now.</div>';
+        }
+      });
+
+      el.reset.addEventListener("click", () => {
+        setQuery({
+          npi: "",
+          first_name: "",
+          last_name: "",
+          organization_name: "",
+          taxonomy_description: "",
+          city: "",
+          state: "",
+          postal_code: "",
+          enumeration_type: "",
+          limit: "10",
+        });
+        el.results.innerHTML =
+          '<div class="empty">No matches yet. Try a different name, specialty, or location.</div>';
+        setStatus("");
+      });
+
+      const initial = window.openai?.widgetState?.lastResults;
+      if (initial) {
+        renderResults(initial);
+        setStatus("Restored previous results.");
+      } else {
+        el.results.innerHTML =
+          '<div class="empty">No matches yet. Try a different name, specialty, or location.</div>';
+      }
+      if (window.openai?.widgetState?.lastQuery) {
+        setQuery(window.openai.widgetState.lastQuery);
+      }
+    </script>
+  </body>
+</html>
