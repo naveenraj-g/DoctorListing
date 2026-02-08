@@ -31,6 +31,9 @@ const createDoctorServer = () => {
   const server = new McpServer({
     name: "doctor-search",
     version: "0.1.0",
+    title: "Doctor Search MCP",
+    description: "Search doctors and organizations from the NPI registry.",
+    websiteUrl: "https://doctorlisting-test.onrender.com",
   });
 
   registerAppResource(
@@ -44,6 +47,29 @@ const createDoctorServer = () => {
           uri: "ui://doctor-search",
           mimeType: RESOURCE_MIME_TYPE,
           text: readFileSync(WIDGET_PATH, "utf-8"),
+          _meta: {
+            ui: {
+              // REQUIRED: your app’s domain
+              domain: "https://doctorlisting-test.onrender.com",
+
+              // REQUIRED: content security policy
+              csp: {
+                // Allow API calls from the widget
+                connectDomains: [
+                  "https://doctorlisting-test.onrender.com",
+                  "https://npiregistry.cms.hhs.gov"
+                ],
+
+                // Allow OpenAI static assets
+                resourceDomains: [
+                  "https://*.oaistatic.com"
+                ],
+
+                // Optional (safe to omit if unused)
+                frameDomains: []
+              }
+            }
+          }
         },
       ],
     })
