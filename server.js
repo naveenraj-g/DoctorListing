@@ -9,6 +9,7 @@ import {
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
+import 'dotenv/config'
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 const WIDGET_PATH = join(process.cwd(), "public", "doctor-widget.html");
