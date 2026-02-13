@@ -9,9 +9,17 @@ import {
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
 import { z } from "zod";
-import 'dotenv/config'
+import "dotenv/config";
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+
+/**
+ * OpenAI domain verification token
+ * MUST match exactly what OpenAI shows
+ */
+const OPENAI_VERIFY_TOKEN =
+  "NwOmb6p42pK3NOCcvLIXDOo-jHEe-r6DmlHWoZPpY5A";
+
 const WIDGET_PATH = join(process.cwd(), "public", "doctor-widget.html");
 
 const searchInputSchema = {
@@ -50,27 +58,17 @@ const createDoctorServer = () => {
           text: readFileSync(WIDGET_PATH, "utf-8"),
           _meta: {
             ui: {
-              // REQUIRED: your app’s domain
               domain: "https://doctorlisting-test.onrender.com",
-
-              // REQUIRED: content security policy
               csp: {
-                // Allow API calls from the widget
                 connectDomains: [
                   "https://doctorlisting-test.onrender.com",
-                  "https://npiregistry.cms.hhs.gov"
+                  "https://npiregistry.cms.hhs.gov",
                 ],
-
-                // Allow OpenAI static assets
-                resourceDomains: [
-                  "https://*.oaistatic.com"
-                ],
-
-                // Optional (safe to omit if unused)
-                frameDomains: []
-              }
-            }
-          }
+                resourceDomains: ["https://*.oaistatic.com"],
+                frameDomains: [],
+              },
+            },
+          },
         },
       ],
     })
@@ -91,12 +89,7 @@ const createDoctorServer = () => {
       const hasQuery = Object.entries(args).some(([, value]) => value);
       if (!hasQuery) {
         return {
-          content: [
-            {
-              type: "text",
-              text: "Please provide at least one search field.",
-            },
-          ],
+          content: [{ type: "text", text: "Please provide at least one search field." }],
           structuredContent: {
             results: [],
             result_count: 0,
@@ -126,53 +119,53 @@ const createDoctorServer = () => {
         if (value) url.searchParams.set(key, value);
       });
 
-      const response = await fetch(url, { method: "GET" });
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`NPI registry error: ${response.status}`);
       }
+
       const data = await response.json();
 
       const results = (data.results || []).map((entry) => {
         const basic = entry.basic || {};
         const addresses = entry.addresses || [];
         const taxonomies = entry.taxonomies || [];
+
         const location =
-          addresses.find((address) => address.address_purpose === "LOCATION") ||
+          addresses.find((a) => a.address_purpose === "LOCATION") ||
           addresses[0] ||
           {};
+
         const taxonomy =
-          taxonomies.find((item) => item.primary) || taxonomies[0] || {};
+          taxonomies.find((t) => t.primary) || taxonomies[0] || {};
 
         const name =
           entry.enumeration_type === "NPI-1"
             ? [basic.first_name, basic.last_name].filter(Boolean).join(" ")
             : basic.organization_name;
 
-        const addressParts = [
+        const address = [
           location.address_1,
           location.address_2,
           location.city,
           location.state,
           location.postal_code,
-        ].filter(Boolean);
+        ]
+          .filter(Boolean)
+          .join(", ");
 
         return {
           npi: entry.number,
           type: entry.enumeration_type,
           name: name || "Unknown",
           specialty: taxonomy.desc || "",
-          address: addressParts.join(", "),
+          address,
           phone: location.telephone_number || "",
         };
       });
 
       return {
-        content: [
-          {
-            type: "text",
-            text: `Found ${results.length} result(s).`,
-          },
-        ],
+        content: [{ type: "text", text: `Found ${results.length} result(s).` }],
         structuredContent: {
           results,
           result_count: data.result_count ?? results.length,
@@ -196,6 +189,27 @@ http
     const MCP_PATH = "/mcp";
     const MCP_METHODS = new Set(["POST", "GET", "DELETE"]);
 
+    /**
+     * 🔐 OpenAI Domain Verification Endpoint
+     */
+    if (req.method === "GET" && url.pathname === "/.well-known/openai-apps-challenge") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end(OPENAI_VERIFY_TOKEN);
+      return;
+    }
+
+    /**
+     * Health check
+     */
+    if (req.method === "GET" && url.pathname === "/") {
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      res.end("Doctor Search MCP server is running.");
+      return;
+    }
+
+    /**
+     * CORS preflight for MCP
+     */
     if (req.method === "OPTIONS" && url.pathname === MCP_PATH) {
       res.writeHead(204, {
         "Access-Control-Allow-Origin": "*",
@@ -207,24 +221,9 @@ http
       return;
     }
 
-    if (req.method === "GET" && url.pathname === "/") {
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("Doctor Search MCP server is running.");
-      return;
-    }
-
-    if (req.method === "GET" && url.pathname === "/public/doctor-widget.html") {
-      try {
-        const html = readFileSync(WIDGET_PATH, "utf-8");
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-        res.end(html);
-      } catch (error) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Unable to load widget.");
-      }
-      return;
-    }
-
+    /**
+     * MCP endpoint
+     */
     if (url.pathname === MCP_PATH && req.method && MCP_METHODS.has(req.method)) {
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
