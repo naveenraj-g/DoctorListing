@@ -18,7 +18,7 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
  * MUST match exactly what OpenAI shows
  */
 const OPENAI_VERIFY_TOKEN =
-  "NwOmb6p42pK3NOCcvLIXDOo-jHEe-r6DmlHWoZPpY5A";
+  "NwOmb6p42pK3N0CcvLIXD0o-jHEe-r6DmlHWoZPpY5A";
 
 const WIDGET_PATH = join(process.cwd(), "public", "doctor-widget.html");
 
